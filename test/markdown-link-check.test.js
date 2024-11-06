@@ -6,6 +6,7 @@ const expect = require('expect.js');
 const http = require('http');
 const express = require('express');
 const markdownLinkCheck = require('../');
+const dirname = process.platform === 'win32' ? __dirname.replace(/\\/g, '/') : __dirname;
 
 describe('markdown-link-check', function () {
     const MAX_RETRY_COUNT = 5;
@@ -66,7 +67,7 @@ describe('markdown-link-check', function () {
 
         app.get('/hello.jpg', function (req, res) {
             res.sendFile('hello.jpg', {
-                root: __dirname,
+                root: dirname,
                 dotfiles: 'deny'
             });
         });
@@ -76,7 +77,7 @@ describe('markdown-link-check', function () {
         });
 
         const server = http.createServer(app);
-        server.listen(0 /* random open port */, 'localhost', function serverListen(err) {
+        server.listen(0 /* random open port */, '127.0.0.1', function serverListen(err) {
             if (err) {
                 done(err);
                 return;
@@ -88,7 +89,7 @@ describe('markdown-link-check', function () {
 
     it('should check the links in sample.md', function (done) {
         markdownLinkCheck(
-            fs.readFileSync(path.join(__dirname, 'sample.md')).toString().replace(/%%BASE_URL%%/g, baseUrl),
+            fs.readFileSync(path.join(dirname, 'sample.md')).toString().replace(/%%BASE_URL%%/g, baseUrl),
             {
                 baseUrl: baseUrl,
                 ignorePatterns: [{ pattern: /not-working-and-ignored/ }],
@@ -141,12 +142,6 @@ describe('markdown-link-check', function () {
                 // partial
                 { statusCode: 206, status: 'alive' },
 
-                // hello image
-                { statusCode: 200, status: 'alive' },
-
-                // hello image
-                { statusCode: 200, status: 'alive' },
-
                 // valid e-mail
                 { statusCode: 200, status:  'alive' },
 
@@ -158,6 +153,13 @@ describe('markdown-link-check', function () {
 
                 // invalid protocol
                 { statusCode: 500, status:  'error' },
+
+                // hello image
+                { statusCode: 200, status: 'alive' },
+
+                // hello image
+                { statusCode: 200, status: 'alive' },
+
             ];
             expect(results.length).to.be(expected.length);
 
@@ -171,7 +173,7 @@ describe('markdown-link-check', function () {
     });
 
     it('should check the links in file.md', function (done) {
-        markdownLinkCheck(fs.readFileSync(path.join(__dirname, 'file.md')).toString().replace(/%%BASE_URL%%/g, 'file://' + __dirname), { baseUrl: baseUrl }, function (err, results) {
+        markdownLinkCheck(fs.readFileSync(path.join(dirname, 'file.md')).toString().replace(/%%BASE_URL%%/g, 'file://' + dirname), { baseUrl: baseUrl }, function (err, results) {
             expect(err).to.be(null);
             expect(results).to.be.an('array');
 
@@ -193,7 +195,7 @@ describe('markdown-link-check', function () {
     });
 
     it('should check the links in local-file.md', function (done) {
-        markdownLinkCheck(fs.readFileSync(path.join(__dirname, 'local-file.md')).toString().replace(/%%BASE_URL%%/g, 'file://' + __dirname), {baseUrl: 'file://' + __dirname, projectBaseUrl: 'file://' + __dirname + "/..",replacementPatterns: [{ pattern: '^/', replacement: "{{BASEURL}}/"}]}, function (err, results) {
+        markdownLinkCheck(fs.readFileSync(path.join(dirname, 'local-file.md')).toString().replace(/%%BASE_URL%%/g, 'file://' + dirname), {baseUrl: 'file://' + dirname, projectBaseUrl: 'file://' + dirname + "/..",replacementPatterns: [{ pattern: '^/', replacement: "{{BASEURL}}/"}]}, function (err, results) {
             expect(err).to.be(null);
             expect(results).to.be.an('array');
 
@@ -240,7 +242,7 @@ describe('markdown-link-check', function () {
     });
 
     it('should handle links with parens', function (done) {
-        markdownLinkCheck('[test](' + baseUrl + '/foo\(a=b.42\).aspx)', function (err, results) {
+        markdownLinkCheck('[test](' + baseUrl + '/foo(a=b.42).aspx)', function (err, results) {
             expect(err).to.be(null);
             expect(results).to.be.an('array');
             expect(results).to.have.length(1);
@@ -250,10 +252,39 @@ describe('markdown-link-check', function () {
         });
     });
 
+    it('should check section links to headers in section-links.md', function (done) {
+        markdownLinkCheck(fs.readFileSync(path.join(dirname, 'section-links.md')).toString(), { baseUrl: 'https://BASEURL' }, function (err, results) {
+            expect(err).to.be(null);
+            expect(results).to.be.an('array');
+
+            const expected = [
+                { statusCode: 200, status: 'alive' },
+                { statusCode: 404, status:  'dead' },
+                { statusCode: 200, status: 'alive' },
+                { statusCode: 200, status: 'alive' },
+                { statusCode: 200, status: 'alive' },
+                { statusCode: 404, status:  'dead' },
+                { statusCode: 404, status:  'dead' },
+                { statusCode: 200, status: 'alive' },
+                { statusCode: 200, status: 'alive' },
+                { statusCode: 200, status: 'alive' }
+            ];
+
+            expect(results.length).to.be(expected.length);
+
+            for (let i = 0; i < results.length; i++) {
+                expect(results[i].statusCode).to.be(expected[i].statusCode);
+                expect(results[i].status).to.be(expected[i].status);
+            }
+
+            done();
+        });
+    });
+
     it('should enrich http headers with environment variables', function (done) {
         process.env.BASIC_AUTH_TOKEN = 'Zm9vOmJhcg==';
         markdownLinkCheck(
-            fs.readFileSync(path.join(__dirname, 'sample.md')).toString().replace(/%%BASE_URL%%/g, baseUrl),
+            fs.readFileSync(path.join(dirname, 'sample.md')).toString().replace(/%%BASE_URL%%/g, baseUrl),
             {
                 baseUrl: baseUrl,
                 httpHeaders: [
@@ -266,15 +297,15 @@ describe('markdown-link-check', function () {
                 "retryOn429":true,
                 "retryCount": MAX_RETRY_COUNT,
                 "fallbackRetryDelay": "500ms"
-            }, function (err, results) {
+            }, function (err) {
             expect(err).to.be(null);
             done();
         });
     });
 
     it('should enrich pattern replacement strings with environment variables', function (done) {
-        process.env.WORKSPACE = 'file://' + __dirname + '/..';
-        markdownLinkCheck(fs.readFileSync(path.join(__dirname, 'local-file.md')).toString().replace(/%%BASE_URL%%/g, 'file://' + __dirname), {baseUrl: 'file://' + __dirname, projectBaseUrl: 'file://' + __dirname + "/..",replacementPatterns: [{ pattern: '^/', replacement: "{{env.WORKSPACE}}/"}]}, function (err, results) {
+        process.env.WORKSPACE = 'file://' + dirname + '/..';
+        markdownLinkCheck(fs.readFileSync(path.join(dirname, 'local-file.md')).toString().replace(/%%BASE_URL%%/g, 'file://' + dirname), {baseUrl: 'file://' + dirname, projectBaseUrl: 'file://' + dirname + "/..",replacementPatterns: [{ pattern: '^/', replacement: "{{env.WORKSPACE}}/"}]}, function (err, results) {
             expect(err).to.be(null);
             expect(results).to.be.an('array');
 
@@ -305,7 +336,7 @@ describe('markdown-link-check', function () {
         process.env.lowercase = 'hello.jpg';
         process.env['WITH-Special_Characters-123'] = 'hello.jpg';
 
-        markdownLinkCheck(fs.readFileSync(path.join(__dirname, 'special-replacements.md')).toString().replace(/%%BASE_URL%%/g, 'file://' + __dirname), {baseUrl: 'file://' + __dirname, projectBaseUrl: 'file://' + __dirname + "/..",replacementPatterns: [
+        markdownLinkCheck(fs.readFileSync(path.join(dirname, 'special-replacements.md')).toString().replace(/%%BASE_URL%%/g, 'file://' + dirname), {baseUrl: 'file://' + dirname, projectBaseUrl: 'file://' + dirname + "/..",replacementPatterns: [
             {pattern: '^/', replacement: "{{BASEURL}}/"},
             {pattern: '%%ENVVAR_MIXEDCASE_TEST%%', replacement: "{{env.MixedCase}}"},
             {pattern: '%%ENVVAR_UPPERCASE_TEST%%', replacement: "{{env.UPPERCASE}}"},
@@ -336,6 +367,72 @@ describe('markdown-link-check', function () {
                 expect(results[i].status).to.be(expected[i].status);
             }
 
+            done();
+        });
+    });
+
+    it('should correctly resolve regex named groups in replacement patterns', function (done) {
+        markdownLinkCheck(fs.readFileSync(path.join(dirname, 'regex-groups-replacement.md')).toString().replace(/%%BASE_URL%%/g, 'file://' + dirname), {baseUrl: 'file://' + dirname, projectBaseUrl: 'file://' + dirname + "/..",replacementPatterns: [
+            {pattern: '^/', replacement: "{{BASEURL}}/"},
+            {pattern: 'folder-to-be-ignored/(?<filename>.*)', replacement: '$<filename>'}
+        ]}, function (err, results) {
+            expect(err).to.be(null);
+            expect(results).to.be.an('array');
+
+            const expected = [
+                { statusCode: 200, status: 'alive' },
+                { statusCode: 200, status: 'alive' },
+                { statusCode: 200, status: 'alive' },
+                { statusCode: 200, status: 'alive' }
+            ];
+
+            expect(results.length).to.be(expected.length);
+
+            for (let i = 0; i < results.length; i++) {
+                expect(results[i].statusCode).to.be(expected[i].statusCode);
+                expect(results[i].status).to.be(expected[i].status);
+            }
+
+            done();
+        });
+    });
+
+    it('check hash links', function (done) {
+        markdownLinkCheck(fs.readFileSync(path.join(dirname, 'hash-links.md')).toString(), {}, function (err, result) {
+            expect(err).to.be(null);
+            expect(result).to.eql([
+                { link: '#foo', statusCode: 200, err: null, status: 'alive' },
+                { link: '#bar', statusCode: 200, err: null, status: 'alive' },
+                { link: '#does-not-exist', statusCode: 404, err: null, status: 'dead' },
+                { link: '#potato', statusCode: 404, err: null, status: 'dead' },
+                { link: '#tomato_id', statusCode: 200, err: null, status: 'alive' },
+                { link: '#tomato_name', statusCode: 200, err: null, status: 'alive' },
+                { link: '#tomato_id_single_quote', statusCode: 200, err: null, status: 'alive' },
+                { link: '#tomato_name_single_quote', statusCode: 200, err: null, status: 'alive' },
+                { link: '#tomato_code', statusCode: 404, err: null, status: 'dead' },
+                { link: '#tomato_escaped_backticks', statusCode: 200, err: null, status: 'alive' },
+                { link: '#tomato_comment', statusCode: 404, err: null, status: 'dead' },
+                { link: '#onion', statusCode: 200, err: null, status: 'alive' },
+                { link: '#onion_outer', statusCode: 200, err: null, status: 'alive' },
+                { link: '#onion_inner', statusCode: 200, err: null, status: 'alive' },
+                { link: '#header-with-special-char-at-end-', statusCode: 200, err: null, status: 'alive' },
+                { link: '#header-with-multiple-special-chars-at-end-', statusCode: 200, err: null, status: 'alive' },
+                { link: '#header-with-special--char', statusCode: 200, err: null, status: 'alive' },
+                { link: '#header-with-multiple-special--chars', statusCode: 200, err: null, status: 'alive' },
+                { link: '#header-with-german-umlaut-%C3%B6', statusCode: 200, err: null, status: 'alive' },
+                { link: '#header-with-german-umlaut-%C3%B6-manual-encoded-link', statusCode: 200, err: null, status: 'alive' },
+                { link: 'https://github.com/tcort/markdown-link-check', statusCode: 200, err: null, status: 'alive' },
+                { link: '#heading-with-a-link', statusCode: 200, err: null, status: 'alive' },
+                { link: '#heading-with-an-anchor-link', statusCode: 200, err: null, status: 'alive' },
+                { link: '#--docker', statusCode: 200, err: null, status: 'alive' },
+                { link: '#step-7---lint--test', statusCode: 200, err: null, status: 'alive' },
+                { link: '#product-owner--design-approval', statusCode: 200, err: null, status: 'alive' },
+                { link: '#migrating-from--v1180', statusCode: 200, err: null, status: 'alive' },
+                { link: '#clientserver-examples-using--networkpeer', statusCode: 200, err: null, status: 'alive' },
+                { link: '#somewhere', statusCode: 200, err: null, status: 'alive' },
+                { link: '#this-header-is-linked', statusCode: 200, err: null, status: 'alive' },
+                { link: '#l-is-the-package-in-the-linux-distro-base-image', statusCode: 200, err: null, status: 'alive' },
+            ]);
             done();
         });
     });

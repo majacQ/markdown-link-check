@@ -1,4 +1,4 @@
-![Test library workflow status](https://github.com/tcort/markdown-link-check/workflows/Test%20library/badge.svg)
+![Test library workflow status](https://github.com/tcort/markdown-link-check/actions/workflows/ci.yml/badge.svg)
 
 # markdown-link-check
 
@@ -38,9 +38,36 @@ Alternatively, if you wish to target a specific release, images are tagged with 
 
 Please head on to [github-action-markdown-link-check](https://github.com/gaurav-nelson/github-action-markdown-link-check).
 
+## Run as a pre-commit hook
+
+To run as a [pre-commit hook](https://pre-commit.com):
+
+```
+- repo: https://github.com/tcort/markdown-link-check
+  rev: ...
+  hooks:
+    - id: markdown-link-check
+      args: [-q]
+```
+
+## Run in a GitLab pipeline
+
+```yaml
+linkchecker:
+  stage: test
+  image:
+    name: ghcr.io/tcort/markdown-link-check:3.11.2
+    entrypoint: ["/bin/sh", "-c"]
+  script:
+    - markdown-link-check ./docs
+  rules:
+    - changes:
+      - "**/*.md"
+```
+
 ## Run in other tools
 
-- [Mega-Linter](https://nvuillam.github.io/mega-linter/): Linters aggregator [including markdown-link-check](https://nvuillam.github.io/mega-linter/descriptors/markdown_markdown_link_check/)
+- [Mega-Linter](https://megalinter.io/latest/): Linters aggregator [including markdown-link-check](https://megalinter.io/latest/descriptors/markdown_markdown_link_check/)
 
 ## API
 
@@ -54,12 +81,11 @@ Parameters:
 
 * `markdown` string containing markdown formatted text.
 * `opts` optional options object containing any of the following optional fields:
-  * `baseUrl` the base URL for relative links.
   * `showProgressBar` enable an ASCII progress bar.
   * `timeout` timeout in [zeit/ms](https://www.npmjs.com/package/ms) format. (e.g. `"2000ms"`, `20s`, `1m`). Default `10s`.
   * `httpHeaders` to apply URL specific headers, see example below.
   * `ignorePatterns` an array of objects holding regular expressions which a link is checked against and skipped for checking in case of a match. Example: `[{ pattern: /foo/ }]`
-  * `replacementPatterns` an array of objects holding regular expressions which are replaced in a link with their corresponding replacement string. This behavior allows (for example) to adapt to certain platform conventions hosting the Markdown. The special replacement `{{BASEURL}}` can be used to dynamically link to the base folder (used from `projectBaseUrl`) (for example that `/` points to the root of your local repository). Example: `[{ pattern: /^.attachments/, replacement: "file://some/conventional/folder/.attachments" }, { pattern: ^/, replacement: "{{BASEURL}}/"}]`
+  * `replacementPatterns` an array of objects holding regular expressions which are replaced in a link with their corresponding replacement string. This behavior allows (for example) to adapt to certain platform conventions hosting the Markdown. The special replacement `{{BASEURL}}` can be used to dynamically link to the base folder (used from `projectBaseUrl`) (for example that `/` points to the root of your local repository). Example: `[{ pattern: /^.attachments/, replacement: "file://some/conventional/folder/.attachments" }, { pattern: ^/, replacement: "{{BASEURL}}/"}]`. You can add `"global": true` to use a global regular expression to replace all instances.
   * `projectBaseUrl` the URL to use for `{{BASEURL}}` replacement
   * `ignoreDisable` if this is `true` then disable comments are ignored.
   * `retryOn429` if this is `true` then retry request when response is an HTTP code 429 after the duration indicated by `retry-after` header.
@@ -143,29 +169,33 @@ markdown-link-check ./README.md
 
 #### Check links from a local markdown folder (recursive)
 
-Avoid using `find -exec` because it will swallow the error from each consecutive run.
-Instead, use `xargs`:
+This checks all files in folder `./docs` with file extension `*.md`:
+
+```shell
+markdown-link-check ./docs
+```
+
+The files can also be searched for and filtered manually:
+
 ```shell
 find . -name \*.md -print0 | xargs -0 -n1 markdown-link-check
 ```
 
-There is an [open issue](https://github.com/tcort/markdown-link-check/issues/78) for allowing the tool to specify
-multiple files on the command line.
-
 #### Usage
 
 ```shell
-Usage: markdown-link-check [options] [filenameOrUrl]
+Usage: markdown-link-check [options] [filenameOrDirectorynameOrUrl]
 
 Options:
-  -p, --progress         show progress bar
-  -c, --config [config]  apply a config file (JSON), holding e.g. url specific header configuration
-  -q, --quiet            displays errors only
-  -v, --verbose          displays detailed error information
-  -a, --alive <code>     comma separated list of HTTP code to be considered as alive
-  -r, --retry            retry after the duration indicated in 'retry-after' header when HTTP code is 429
-  -h, --help             display help for command
-  -V, --version          display version string (e.g. `1.2.3`)
+  -p, --progress              show progress bar
+  -c, --config [config]       apply a config file (JSON), holding e.g. url specific header configuration
+  -q, --quiet                 displays errors only
+  -v, --verbose               displays detailed error information
+  -a, --alive <code>          comma separated list of HTTP code to be considered as alive
+  -r, --retry                 retry after the duration indicated in 'retry-after' header when HTTP code is 429
+  -h, --help                  display help for command
+  -V, --version               display version string (e.g. `1.2.3`)
+    , --projectBaseUrl <url>  the URL to use for {{BASEURL}} replacement
 ```
 
 ##### Config file format
@@ -173,18 +203,20 @@ Options:
 `config.json`:
 
 * `ignorePatterns`: An array of objects holding regular expressions which a link is checked against and skipped for checking in case of a match.
-* `replacementPatterns`: An array of objects holding regular expressions which are replaced in a link with their corresponding replacement string. This behavior allows (for example) to adapt to certain platform conventions hosting the Markdown. The special replacement `{{BASEURL}}` can be used to dynamically link to the current working directory (for example that `/` points to the root of your current working directory).
+* `replacementPatterns`: An array of objects holding regular expressions which are replaced in a link with their corresponding replacement string. This behavior allows (for example) to adapt to certain platform conventions hosting the Markdown. The special replacement `{{BASEURL}}` can be used to dynamically link to the current working directory (for example that `/` points to the root of your current working directory). This parameter supports named regex groups the same way as `string.replace` [method](https://developer.mozilla.org/en-US/docs/Web/JavaScript/Reference/Global_Objects/String/replace#specifying_a_string_as_the_replacement) in node.
 * `httpHeaders`: The headers are only applied to links where the link **starts with** one of the supplied URLs in the `urls` section.
 * `timeout` timeout in [zeit/ms](https://www.npmjs.com/package/ms) format. (e.g. `"2000ms"`, `20s`, `1m`). Default `10s`.
 * `retryOn429` if this is `true` then retry request when response is an HTTP code 429 after the duration indicated by `retry-after` header.
 * `retryCount` the number of retries to be made on a 429 response. Default `2`.
 * `fallbackRetryDelay` the delay in [zeit/ms](https://www.npmjs.com/package/ms) format. (e.g. `"2000ms"`, `20s`, `1m`) for retries on a 429 response when no `retry-after` header is returned or when it has an invalid value. Default is `60s`.
 * `aliveStatusCodes` a list of HTTP codes to consider as alive.
+* `projectBaseUrl` the URL to use for `{{BASEURL}}` replacement
 
 **Example:**
 
 ```json
 {
+  "projectBaseUrl":"${workspaceFolder}",
   "ignorePatterns": [
     {
       "pattern": "^http://example.net"
@@ -198,6 +230,15 @@ Options:
     {
       "pattern": "^/",
       "replacement": "{{BASEURL}}/"
+    },
+    {
+      "pattern": "%20",
+      "replacement": "-",
+      "global": true
+    },
+    {
+      "pattern": "images/(?<filename>.*)",
+      "replacement": "assets/$<filename>"
     }
   ],
   "httpHeaders": [
